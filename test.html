@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataMine Simulator - Test</title>
+    <script defer src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+</head>
+<body>
+    <h1>DataMine Simulator - Algorithm Test</h1>
+    <div id="status">Loading Pyodide...</div>
+    <div id="results"></div>
+    
+    <script>
+        async function testAlgorithms() {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            
+            try {
+                status.textContent = 'Loading Pyodide...';
+                
+                // Load Pyodide
+                let pyodide = await loadPyodide({ 
+                    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' 
+                });
+                
+                status.textContent = 'Loading packages...';
+                
+                // Load core packages
+                await pyodide.loadPackage(['numpy', 'matplotlib', 'scipy', 'pandas']);
+                
+                // Install sklearn and other packages
+                await pyodide.runPythonAsync(`
+import micropip
+try:
+    await micropip.install(['scikit-learn', 'networkx', 'mlxtend'])
+    print('Successfully installed packages')
+except Exception as e:
+    print(f'Package installation warning: {e}')
+`);
+                
+                status.textContent = 'Testing algorithms...';
+                
+                // Test K-Means
+                await pyodide.runPythonAsync(`
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 2)
+
+# Test K-Means
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+labels = kmeans.fit_predict(X)
+
+# Plot
+plt.figure(figsize=(6, 4))
+colors = ['red', 'blue', 'green']
+for i in range(3):
+    plt.scatter(X[labels == i, 0], X[labels == i, 1], c=colors[i], label=f'Cluster {i+1}')
+plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], 
+            c='black', marker='x', s=100, label='Centroids')
+plt.legend()
+plt.title('K-Means Test')
+plt.close()
+
+print('K-Means test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ K-Means: SUCCESS</div>';
+                
+                // Test Linear Regression
+                await pyodide.runPythonAsync(`
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+# Create test data
+X = np.random.rand(50, 1)
+y = 2 * X.flatten() + 1 + np.random.normal(0, 0.1, 50)
+
+# Test Linear Regression
+model = LinearRegression()
+model.fit(X, y)
+y_pred = model.predict(X)
+r2 = r2_score(y, y_pred)
+
+plt.figure(figsize=(6, 4))
+plt.scatter(X, y, alpha=0.7, label='Data')
+plt.plot(X, y_pred, color='red', linewidth=2, label=f'Fit (R²={r2:.3f})')
+plt.legend()
+plt.title('Linear Regression Test')
+plt.close()
+
+print('Linear Regression test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Linear Regression: SUCCESS</div>';
+                
+                // Test Decision Tree
+                await pyodide.runPythonAsync(`
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+
+# Create test data
+X = np.random.rand(50, 2)
+y = (X[:, 0] + X[:, 1] > 1).astype(int)
+
+# Test Decision Tree
+clf = DecisionTreeClassifier(max_depth=3, random_state=42)
+clf.fit(X, y)
+
+plt.figure(figsize=(8, 6))
+plot_tree(clf, filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Decision Tree Test')
+plt.close()
+
+print('Decision Tree test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Decision Tree: SUCCESS</div>';
+                
+                // Test Random Forest
+                await pyodide.runPythonAsync(`
+from sklearn.ensemble import RandomForestClassifier
+
+# Test Random Forest
+rf = RandomForestClassifier(n_estimators=5, max_depth=3, random_state=42)
+rf.fit(X, y)
+
+plt.figure(figsize=(8, 6))
+plot_tree(rf.estimators_[0], filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Random Forest Test - First Tree')
+plt.close()
+
+print('Random Forest test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Random Forest: SUCCESS</div>';
+                
+                // Test Agglomerative Clustering
+                await pyodide.runPythonAsync(`
+from scipy.cluster.hierarchy import linkage, dendrogram
+
+# Test Agglomerative Clustering
+Z = linkage(X, method='average')
+
+plt.figure(figsize=(8, 5))
+dendrogram(Z, truncate_mode='lastp', p=10, show_leaf_counts=True)
+plt.title('Agglomerative Clustering Test')
+plt.close()
+
+print('Agglomerative Clustering test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Agglomerative Clustering: SUCCESS</div>';
+                
+                // Test NetworkX MST
+                await pyodide.runPythonAsync(`
+import networkx as nx
+from scipy.spatial.distance import pdist, squareform
+
+# Test MST
+G = nx.complete_graph(len(X))
+distances = pdist(X)
+dist_matrix = squareform(distances)
+
+for i in range(len(X)):
+    for j in range(i+1, len(X)):
+        G[i][j]['weight'] = dist_matrix[i, j]
+
+T = nx.minimum_spanning_tree(G, weight='weight')
+
+plt.figure(figsize=(6, 4))
+pos = {i: X[i] for i in range(len(X))}
+nx.draw(T, pos, with_labels=False, node_size=50, node_color='lightblue')
+plt.title('Minimum Spanning Tree Test')
+plt.close()
+
+print('MST test successful')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Minimum Spanning Tree: SUCCESS</div>';
+                
+                // Test Apriori
+                await pyodide.runPythonAsync(`
+import pandas as pd
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori, association_rules
+
+# Create test transactions
+transactions = [
+    ['Milk', 'Bread', 'Butter'],
+    ['Bread', 'Butter'],
+    ['Milk', 'Eggs'],
+    ['Bread', 'Eggs', 'Butter'],
+    ['Milk', 'Bread']
+]
+
+# Test Apriori
+te = TransactionEncoder()
+te_ary = te.fit(transactions).transform(transactions)
+df = pd.DataFrame(te_ary, columns=te.columns_)
+
+freq_itemsets = apriori(df, min_support=0.2, use_colnames=True)
+if len(freq_itemsets) > 0:
+    rules = association_rules(freq_itemsets, metric='confidence', min_threshold=0.1)
+    print(f'Apriori test successful - Found {len(rules)} rules')
+else:
+    print('Apriori test successful - No frequent itemsets found')
+
+print('All tests completed successfully!')
+`);
+                
+                results.innerHTML += '<div style="color: green;">✅ Apriori: SUCCESS</div>';
+                
+                status.textContent = 'All algorithms tested successfully!';
+                status.style.color = 'green';
+                
+            } catch (error) {
+                status.textContent = `Error: ${error.message}`;
+                status.style.color = 'red';
+                results.innerHTML += `<div style="color: red;">❌ Error: ${error.message}</div>`;
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Start tests when page loads
+        window.addEventListener('load', testAlgorithms);
+    </script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataMine Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <aside class="sidebar" id="sidebar" aria-hidden="false">
+        <div class="sidebar-header">
+            <span class="logo">DM</span>
+            <button id="sidebar-close" class="icon-btn" aria-label="Close sidebar" aria-controls="sidebar" aria-expanded="true">✕</button>
+        </div>
+        <nav class="side-nav">
+            <a href="#upload-section">Upload</a>
+            <a href="#algorithm-section">Algorithms</a>
+            <a href="#dashboard-section">Dashboard</a>
+            <a href="#insights-section">Insights &amp; Learnings</a>
+        </nav>
+        <div class="sidebar-footer">
+            <button id="theme-toggle" class="btn btn-ghost" aria-label="Toggle theme">🌙</button>
+        </div>
+    </aside>
+
+    <header class="topbar">
+        <button id="sidebar-open" class="hamburger" aria-label="Open sidebar" aria-controls="sidebar" aria-expanded="false">
+            <span class="hamburger-box" aria-hidden="true">
+                <span class="hamburger-inner"></span>
+            </span>
+        </button>
+        <h1>DataMine Simulator</h1>
+        <nav class="top-nav">
+            <a href="#upload-section">Upload</a>
+            <a href="#algorithm-section">Algorithms</a>
+            <a href="#dashboard-section">Dashboard</a>
+            <a href="#insights-section">Insights &amp; Learnings</a>
+        </nav>
+        <button id="theme-toggle-top" class="btn btn-ghost" aria-label="Toggle theme">🌙</button>
+    </header>
+
+    <main class="container">
+        <section id="upload-section" class="section card">
+            <div class="section-header">
+                <h2>Upload Dataset</h2>
+                <div class="actions">
+                    <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx" />
+                    <button id="use-sample-iris" class="btn">Use Iris Sample</button>
+                    <button id="use-sample-sales" class="btn">Use Sales Sample</button>
+                    <button id="use-sample-basket" class="btn">Use Basket Sample</button>
+                </div>
+            </div>
+            <div id="upload-info" class="muted">Upload a dataset file (.csv, .tsv, .xlsx)</div>
+            
+            <div id="upload-content" style="display: none;">
+                <div class="grid two">
+                    <div>
+                        <h3>Preview (first 10 rows)</h3>
+                        <div class="table-wrap">
+                            <table id="preview-table"></table>
+                        </div>
+                    </div>
+                    <div>
+                        <h3>Summary Statistics</h3>
+                        <div id="summary-stats" class="stats-grid"></div>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button id="download-processed" class="btn btn-secondary">Download Processed CSV</button>
+                    <button id="download-log" class="btn btn-secondary">Download Log</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="algorithm-section" class="section">
+            <div class="section-header">
+                <h2>Algorithm Simulations</h2>
+                <div class="algorithm-controls">
+                    <label>
+                        Select Algorithm
+                        <select id="algorithm-selector">
+                            <option value="">Choose an algorithm...</option>
+                            <option value="kmeans">K-Means Clustering</option>
+                            <option value="agglomerative-single">Agglomerative (Single)</option>
+                            <option value="agglomerative-average">Agglomerative (Average)</option>
+                            <option value="agglomerative-complete">Agglomerative (Complete)</option>
+                            <option value="divisive">Divisive Clustering (MST)</option>
+                            <option value="decision-tree">Decision Tree Classifier</option>
+                            <option value="random-forest">Random Forest</option>
+                            <option value="linear-regression">Linear Regression</option>
+                            <option value="apriori">Apriori (Association Rules)</option>
+                        </select>
+                    </label>
+                    <button id="run-selected-algorithm" class="btn" disabled>Run Selected Algorithm</button>
+                </div>
+            </div>
+            
+            <div class="algorithm-parameters" id="algorithm-parameters" style="display: none;">
+                <div class="parameter-controls" id="parameter-controls"></div>
+                <div class="muted" id="column-hint">Select X and Y columns, then click "Confirm Columns" before running.</div>
+            </div>
+            
+            <div class="algorithm-results" id="algorithm-results" style="display: none;">
+                <div class="card">
+                    <h3 id="selected-algorithm-title">Algorithm Results</h3>
+                    <div class="algo-figure" id="algorithm-visualization" role="img" aria-label="Algorithm visualization"></div>
+                    <div class="table-wrap small" id="algorithm-table-container" style="display: none;">
+                        <table class="algo-table" id="algorithm-table"></table>
+                    </div>
+                    <div class="algo-output" id="algorithm-output"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="dashboard-section" class="section card">
+            <div class="section-header">
+                <h2>Comparison Dashboard</h2>
+                <div class="actions">
+                    <button id="refresh-dashboard" class="btn">Refresh Charts</button>
+                    <button id="download-dashboard" class="btn btn-secondary">Download Charts PNG</button>
+                </div>
+            </div>
+            <div class="grid two">
+                <div class="card">
+                    <h3>Accuracy / Score</h3>
+                    <canvas id="score-chart"></canvas>
+                </div>
+                <div class="card">
+                    <h3>Runtime (ms)</h3>
+                    <canvas id="runtime-chart"></canvas>
+                </div>
+            </div>
+        </section>
+        <section id="insights-section" class="section card">
+            <div class="section-header">
+                <h2>Insights &amp; Learnings</h2>
+                <div class="actions">
+                    <button id="refresh-insights" class="btn">Refresh Insights</button>
+                </div>
+            </div>
+            <div id="insights-content" class="highlight" aria-live="polite"></div>
+        </section>
+
+    </main>
+
+    <footer class="footer">
+        <span>© <span id="year"></span> DataMine Simulator</span>
+        <a href="#upload-section">Back to top</a>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+
+

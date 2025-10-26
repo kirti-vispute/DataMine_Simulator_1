@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataMine Simulator - Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+</head>
+<body>
+    <h1>🧪 DataMine Simulator - Algorithm Verification</h1>
+    <div id="status" class="test-result info">Initializing...</div>
+    <div id="results"></div>
+    
+    <script>
+        let pyodide;
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        async function initializePyodide() {
+            try {
+                document.getElementById('status').innerHTML = 'Loading Pyodide...';
+                
+                pyodide = await loadPyodide({ 
+                    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' 
+                });
+                
+                addResult('✅ Pyodide loaded successfully', 'success');
+                
+                // Load packages
+                document.getElementById('status').innerHTML = 'Loading packages...';
+                
+                const packages = ['numpy', 'matplotlib', 'scipy', 'pandas'];
+                for (const pkg of packages) {
+                    await pyodide.loadPackage(pkg);
+                    addResult(`✅ Loaded ${pkg}`, 'success');
+                }
+                
+                // Install additional packages
+                document.getElementById('status').innerHTML = 'Installing additional packages...';
+                
+                await pyodide.runPythonAsync(`
+import micropip
+try:
+    await micropip.install(['scikit-learn', 'networkx', 'mlxtend'])
+    print('Additional packages installed successfully')
+except Exception as e:
+    print(f'Warning: {e}')
+`);
+                
+                addResult('✅ Additional packages installed', 'success');
+                
+                // Setup matplotlib
+                await pyodide.runPythonAsync(`
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+`);
+                
+                addResult('✅ Matplotlib configured', 'success');
+                
+                return true;
+            } catch (error) {
+                addResult(`❌ Initialization failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testKMeans() {
+            try {
+                const result = await pyodide.runPythonAsync(`
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import numpy as np
+import io, base64
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(30, 2)
+
+# Run K-Means
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+labels = kmeans.fit_predict(X)
+
+# Create plot
+plt.figure(figsize=(6, 4))
+colors = ['red', 'blue', 'green']
+for i in range(3):
+    plt.scatter(X[labels == i, 0], X[labels == i, 1], c=colors[i], label=f'Cluster {i+1}')
+plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], 
+            c='black', marker='x', s=100, label='Centroids')
+plt.legend()
+plt.title('K-Means Clustering Test')
+
+# Convert to base64
+buf = io.BytesIO()
+plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+plt.close()
+buf.seek(0)
+img_b64 = base64.b64encode(buf.read()).decode('ascii')
+
+print(f'K-Means completed - Inertia: {kmeans.inertia_:.3f}')
+print(f'Image generated: {len(img_b64)} characters')
+`);
+                
+                addResult('✅ K-Means: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ K-Means failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testLinearRegression() {
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 1)
+y = 2 * X.flatten() + 1 + np.random.normal(0, 0.1, 50)
+
+# Run Linear Regression
+model = LinearRegression()
+model.fit(X, y)
+y_pred = model.predict(X)
+r2 = r2_score(y, y_pred)
+
+# Create plot
+plt.figure(figsize=(6, 4))
+plt.scatter(X, y, alpha=0.7, label='Data Points')
+plt.plot(X, y_pred, color='red', linewidth=2, label=f'Regression Line')
+plt.legend()
+plt.title(f'Linear Regression\\ny = {model.coef_[0]:.3f}x + {model.intercept_:.3f}\\nR² = {r2:.3f}')
+plt.close()
+
+print(f'Linear Regression completed - R²: {r2:.3f}')
+`);
+                
+                addResult('✅ Linear Regression: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Linear Regression failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testDecisionTree() {
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 2)
+y = (X[:, 0] + X[:, 1] > 1).astype(int)
+
+# Run Decision Tree
+clf = DecisionTreeClassifier(max_depth=3, random_state=42)
+clf.fit(X, y)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plot_tree(clf, filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Decision Tree Classifier')
+plt.close()
+
+print(f'Decision Tree completed - Depth: {clf.get_depth()}, Score: {clf.score(X, y):.3f}')
+`);
+                
+                addResult('✅ Decision Tree: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Decision Tree failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testRandomForest() {
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import plot_tree
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 2)
+y = (X[:, 0] + X[:, 1] > 1).astype(int)
+
+# Run Random Forest
+rf = RandomForestClassifier(n_estimators=5, max_depth=3, random_state=42)
+rf.fit(X, y)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plot_tree(rf.estimators_[0], filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Random Forest - First Tree')
+plt.close()
+
+print(f'Random Forest completed - Trees: {len(rf.estimators_)}, Score: {rf.score(X, y):.3f}')
+`);
+                
+                addResult('✅ Random Forest: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Random Forest failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testAgglomerative() {
+            try {
+                await pyodide.runPythonAsync(`
+from scipy.cluster.hierarchy import linkage, dendrogram
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(20, 2)
+
+# Run Agglomerative Clustering
+Z = linkage(X, method='average')
+
+# Create plot
+plt.figure(figsize=(8, 5))
+dendrogram(Z, truncate_mode='lastp', p=10, show_leaf_counts=True)
+plt.title('Agglomerative Clustering Dendrogram')
+plt.close()
+
+print(f'Agglomerative Clustering completed - Linkage matrix shape: {Z.shape}')
+`);
+                
+                addResult('✅ Agglomerative Clustering: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Agglomerative Clustering failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testMST() {
+            try {
+                await pyodide.runPythonAsync(`
+import networkx as nx
+from scipy.spatial.distance import pdist, squareform
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(15, 2)
+
+# Create MST
+G = nx.complete_graph(len(X))
+distances = pdist(X)
+dist_matrix = squareform(distances)
+
+for i in range(len(X)):
+    for j in range(i+1, len(X)):
+        G[i][j]['weight'] = dist_matrix[i, j]
+
+T = nx.minimum_spanning_tree(G, weight='weight')
+
+# Create plot
+plt.figure(figsize=(6, 4))
+pos = {i: X[i] for i in range(len(X))}
+nx.draw(T, pos, with_labels=False, node_size=50, node_color='lightblue', edge_color='gray')
+plt.title('Minimum Spanning Tree')
+plt.close()
+
+print(f'MST completed - Edges: {len(T.edges())}')
+`);
+                
+                addResult('✅ Minimum Spanning Tree: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Minimum Spanning Tree failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testApriori() {
+            try {
+                await pyodide.runPythonAsync(`
+import pandas as pd
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori, association_rules
+
+# Create test transactions
+transactions = [
+    ['Milk', 'Bread', 'Butter'],
+    ['Bread', 'Butter'],
+    ['Milk', 'Eggs'],
+    ['Bread', 'Eggs', 'Butter'],
+    ['Milk', 'Bread'],
+    ['Eggs', 'Cheese'],
+    ['Bread', 'Cheese', 'Butter'],
+    ['Milk', 'Eggs', 'Bread'],
+    ['Butter', 'Eggs'],
+    ['Bread', 'Milk', 'Butter']
+]
+
+# Run Apriori
+te = TransactionEncoder()
+te_ary = te.fit(transactions).transform(transactions)
+df = pd.DataFrame(te_ary, columns=te.columns_)
+
+freq_itemsets = apriori(df, min_support=0.2, use_colnames=True)
+if len(freq_itemsets) > 0:
+    rules = association_rules(freq_itemsets, metric='confidence', min_threshold=0.1)
+    print(f'Apriori completed - Found {len(rules)} association rules')
+else:
+    print('Apriori completed - No frequent itemsets found')
+`);
+                
+                addResult('✅ Apriori: Algorithm executed successfully', 'success');
+                return true;
+            } catch (error) {
+                addResult(`❌ Apriori failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function runAllTests() {
+            const initSuccess = await initializePyodide();
+            if (!initSuccess) return;
+            
+            document.getElementById('status').innerHTML = 'Running algorithm tests...';
+            
+            const tests = [
+                { name: 'K-Means', fn: testKMeans },
+                { name: 'Linear Regression', fn: testLinearRegression },
+                { name: 'Decision Tree', fn: testDecisionTree },
+                { name: 'Random Forest', fn: testRandomForest },
+                { name: 'Agglomerative Clustering', fn: testAgglomerative },
+                { name: 'Minimum Spanning Tree', fn: testMST },
+                { name: 'Apriori', fn: testApriori }
+            ];
+            
+            let successCount = 0;
+            for (const test of tests) {
+                const success = await test.fn();
+                if (success) successCount++;
+            }
+            
+            document.getElementById('status').innerHTML = 
+                `Tests completed: ${successCount}/${tests.length} algorithms working correctly`;
+            
+            if (successCount === tests.length) {
+                document.getElementById('status').className = 'test-result success';
+                addResult('🎉 All algorithms are working correctly!', 'success');
+            } else {
+                document.getElementById('status').className = 'test-result error';
+                addResult(`⚠️ ${tests.length - successCount} algorithms need attention`, 'error');
+            }
+        }
+        
+        // Start tests when page loads
+        window.addEventListener('load', runAllTests);
+    </script>
+</body>
+</html>

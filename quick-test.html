@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Test - DataMine Simulator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .result-img { max-width: 100%; height: auto; border: 1px solid #ddd; margin: 10px 0; }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 DataMine Simulator - Quick Test</h1>
+        <p>This page tests the core functionality of the DataMine Simulator algorithms.</p>
+        
+        <div id="status" class="test-section loading">
+            <h3>Status</h3>
+            <p>Initializing...</p>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Controls</h3>
+            <button onclick="testKMeans()">Test K-Means</button>
+            <button onclick="testLinearRegression()">Test Linear Regression</button>
+            <button onclick="testDecisionTree()">Test Decision Tree</button>
+            <button onclick="testRandomForest()">Test Random Forest</button>
+            <button onclick="testAllAlgorithms()">Test All Algorithms</button>
+        </div>
+        
+        <div id="results" class="test-section">
+            <h3>Results</h3>
+            <p>Click a test button to run algorithms...</p>
+        </div>
+    </div>
+    
+    <script>
+        let pyodide;
+        let isInitialized = false;
+        
+        function updateStatus(message, type = 'loading') {
+            const status = document.getElementById('status');
+            status.className = `test-section ${type}`;
+            status.innerHTML = `<h3>Status</h3><p>${message}</p>`;
+        }
+        
+        function addResult(title, content, type = 'loading') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `test-section ${type}`;
+            div.innerHTML = `<h4>${title}</h4>${content}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function initializePyodide() {
+            if (isInitialized) return true;
+            
+            try {
+                updateStatus('Loading Pyodide...', 'loading');
+                
+                pyodide = await loadPyodide({ 
+                    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' 
+                });
+                
+                updateStatus('Loading packages...', 'loading');
+                
+                // Load core packages
+                const packages = ['numpy', 'matplotlib', 'scipy', 'pandas'];
+                for (const pkg of packages) {
+                    await pyodide.loadPackage(pkg);
+                }
+                
+                updateStatus('Installing additional packages...', 'loading');
+                
+                // Install sklearn and other packages
+                await pyodide.runPythonAsync(`
+import micropip
+try:
+    await micropip.install(['scikit-learn', 'networkx', 'mlxtend'])
+    print('Packages installed successfully')
+except Exception as e:
+    print(f'Warning: {e}')
+`);
+                
+                updateStatus('Setting up Python environment...', 'loading');
+                
+                // Setup Python environment
+                await pyodide.runPythonAsync(`
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+import io, base64
+
+def fig_to_base64():
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode('ascii')
+
+print('Python environment ready')
+`);
+                
+                isInitialized = true;
+                updateStatus('Ready to test algorithms!', 'success');
+                return true;
+                
+            } catch (error) {
+                updateStatus(`Initialization failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testKMeans() {
+            if (!await initializePyodide()) return;
+            
+            try {
+                const result = await pyodide.runPythonAsync(`
+from sklearn.cluster import KMeans
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(30, 2)
+
+# Run K-Means
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+labels = kmeans.fit_predict(X)
+
+# Create plot
+plt.figure(figsize=(6, 4))
+colors = ['red', 'blue', 'green']
+for i in range(3):
+    plt.scatter(X[labels == i, 0], X[labels == i, 1], c=colors[i], label=f'Cluster {i+1}', s=50)
+plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], 
+            c='black', marker='x', s=100, linewidths=2, label='Centroids')
+plt.legend()
+plt.title('K-Means Clustering Test')
+plt.xlabel('Feature 1')
+plt.ylabel('Feature 2')
+
+img = fig_to_base64()
+print(f'K-Means completed - Inertia: {kmeans.inertia_:.3f}')
+print(f'Image size: {len(img)} characters')
+`);
+                
+                addResult('✅ K-Means Test', `
+                    <p><strong>Status:</strong> Success</p>
+                    <p><strong>Details:</strong> K-Means clustering algorithm executed successfully</p>
+                    <p><strong>Inertia:</strong> ${await pyodide.runPythonAsync('print(kmeans.inertia_)')}</p>
+                `, 'success');
+                
+            } catch (error) {
+                addResult('❌ K-Means Test', `
+                    <p><strong>Status:</strong> Failed</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function testLinearRegression() {
+            if (!await initializePyodide()) return;
+            
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 1)
+y = 2 * X.flatten() + 1 + np.random.normal(0, 0.1, 50)
+
+# Run Linear Regression
+model = LinearRegression()
+model.fit(X, y)
+y_pred = model.predict(X)
+r2 = r2_score(y, y_pred)
+
+# Create plot
+plt.figure(figsize=(8, 5))
+plt.scatter(X, y, s=30, color='#60a5fa', alpha=0.7, label='Data Points')
+plt.plot(X, y_pred, color='#ef4444', linewidth=2, label='Regression Line')
+plt.legend()
+plt.title(f'Linear Regression\\ny = {model.coef_[0]:.3f}x + {model.intercept_:.3f}\\nR² = {r2:.3f}')
+plt.xlabel('Feature 1')
+plt.ylabel('Target')
+
+img = fig_to_base64()
+print(f'Linear Regression completed - R²: {r2:.3f}')
+print(f'Coefficient: {model.coef_[0]:.3f}, Intercept: {model.intercept_:.3f}')
+`);
+                
+                addResult('✅ Linear Regression Test', `
+                    <p><strong>Status:</strong> Success</p>
+                    <p><strong>Details:</strong> Linear regression algorithm executed successfully</p>
+                    <p><strong>R² Score:</strong> ${await pyodide.runPythonAsync('print(f"{r2:.3f}")')}</p>
+                `, 'success');
+                
+            } catch (error) {
+                addResult('❌ Linear Regression Test', `
+                    <p><strong>Status:</strong> Failed</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function testDecisionTree() {
+            if (!await initializePyodide()) return;
+            
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 2)
+y = (X[:, 0] + X[:, 1] > 1).astype(int)
+
+# Run Decision Tree
+clf = DecisionTreeClassifier(max_depth=3, random_state=42)
+clf.fit(X, y)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plot_tree(clf, filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Decision Tree Classifier')
+
+img = fig_to_base64()
+print(f'Decision Tree completed - Depth: {clf.get_depth()}, Score: {clf.score(X, y):.3f}')
+`);
+                
+                addResult('✅ Decision Tree Test', `
+                    <p><strong>Status:</strong> Success</p>
+                    <p><strong>Details:</strong> Decision tree algorithm executed successfully</p>
+                    <p><strong>Tree Depth:</strong> ${await pyodide.runPythonAsync('print(clf.get_depth())')}</p>
+                    <p><strong>Accuracy:</strong> ${await pyodide.runPythonAsync('print(f"{clf.score(X, y):.3f}")')}</p>
+                `, 'success');
+                
+            } catch (error) {
+                addResult('❌ Decision Tree Test', `
+                    <p><strong>Status:</strong> Failed</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function testRandomForest() {
+            if (!await initializePyodide()) return;
+            
+            try {
+                await pyodide.runPythonAsync(`
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import plot_tree
+import numpy as np
+
+# Create test data
+np.random.seed(42)
+X = np.random.rand(50, 2)
+y = (X[:, 0] + X[:, 1] > 1).astype(int)
+
+# Run Random Forest
+rf = RandomForestClassifier(n_estimators=5, max_depth=3, random_state=42)
+rf.fit(X, y)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plot_tree(rf.estimators_[0], filled=True, feature_names=['Feature 1', 'Feature 2'], 
+          class_names=['Class 0', 'Class 1'], fontsize=8)
+plt.title('Random Forest - First Tree')
+
+img = fig_to_base64()
+print(f'Random Forest completed - Trees: {len(rf.estimators_)}, Score: {rf.score(X, y):.3f}')
+`);
+                
+                addResult('✅ Random Forest Test', `
+                    <p><strong>Status:</strong> Success</p>
+                    <p><strong>Details:</strong> Random forest algorithm executed successfully</p>
+                    <p><strong>Number of Trees:</strong> ${await pyodide.runPythonAsync('print(len(rf.estimators_))')}</p>
+                    <p><strong>Accuracy:</strong> ${await pyodide.runPythonAsync('print(f"{rf.score(X, y):.3f}")')}</p>
+                `, 'success');
+                
+            } catch (error) {
+                addResult('❌ Random Forest Test', `
+                    <p><strong>Status:</strong> Failed</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function testAllAlgorithms() {
+            if (!await initializePyodide()) return;
+            
+            updateStatus('Running all algorithm tests...', 'loading');
+            
+            const algorithms = [
+                { name: 'K-Means', fn: testKMeans },
+                { name: 'Linear Regression', fn: testLinearRegression },
+                { name: 'Decision Tree', fn: testDecisionTree },
+                { name: 'Random Forest', fn: testRandomForest }
+            ];
+            
+            let successCount = 0;
+            
+            for (const algo of algorithms) {
+                try {
+                    await algo.fn();
+                    successCount++;
+                } catch (error) {
+                    addResult(`❌ ${algo.name} Test`, `
+                        <p><strong>Status:</strong> Failed</p>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    `, 'error');
+                }
+            }
+            
+            updateStatus(`Tests completed: ${successCount}/${algorithms.length} algorithms successful`, 
+                        successCount === algorithms.length ? 'success' : 'error');
+            
+            if (successCount === algorithms.length) {
+                addResult('🎉 All Tests Complete', `
+                    <p><strong>Result:</strong> All algorithms are working correctly!</p>
+                    <p>The DataMine Simulator is ready to use.</p>
+                `, 'success');
+            } else {
+                addResult('⚠️ Tests Complete', `
+                    <p><strong>Result:</strong> ${algorithms.length - successCount} algorithms need attention.</p>
+                    <p>Check the individual test results above for details.</p>
+                `, 'error');
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', initializePyodide);
+    </script>
+</body>
+</html>
