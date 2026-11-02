@@ -32,16 +32,13 @@ const appState = {
   import micropip, asyncio
   async def install_packages():
       ok = True
-      results = await asyncio.gather(
-          *[micropip.install(pkg, deps=False) for pkg in ['scikit-learn', 'networkx', 'mlxtend']],
-          return_exceptions=True
-      )
-      for pkg, r in zip(['scikit-learn', 'networkx', 'mlxtend'], results):
-          if isinstance(r, Exception):
-              print(f'Package installation warning ({pkg}): {r}')
-              ok = False
-          else:
+      for pkg in ['scikit-learn', 'networkx', 'mlxtend']:
+          try:
+              await micropip.install(pkg, deps=False)
               print(f'Successfully installed {pkg}')
+          except Exception as e:
+              print(f'Package installation warning ({pkg}): {e}')
+              ok = False
       return ok
   result = await install_packages()
   print(f'Installation result: {result}')
