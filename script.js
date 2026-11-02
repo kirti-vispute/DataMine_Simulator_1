@@ -25,23 +25,23 @@ const appState = {
       console.log('Loading Pyodide...');
       pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
       console.log('Loading core packages...');
-      const corePackages = ['micropip', 'numpy', 'matplotlib', 'scipy', 'pandas'];
-      for(const pkg of corePackages){
-        try{ await pyodide.loadPackage(pkg); console.log(`Loaded ${pkg}`);}catch(e){ console.warn(`Failed to load package ${pkg}:`, e); }
-      }
+      try{ await pyodide.loadPackage(['micropip', 'numpy', 'matplotlib', 'scipy', 'pandas']); console.log('Loaded core packages'); }catch(e){ console.warn('Failed to load core packages:', e); }
       try{
         console.log('Installing sklearn and other packages...');
         await pyodide.runPythonAsync(`
   import micropip, asyncio
   async def install_packages():
       ok = True
-      for pkg in ['scikit-learn', 'networkx', 'mlxtend']:
-          try:
-              await micropip.install(pkg, deps=False)
-              print(f'Successfully installed {pkg}')
-          except Exception as e:
-              print(f'Package installation warning ({pkg}): {e}')
+      results = await asyncio.gather(
+          *[micropip.install(pkg, deps=False) for pkg in ['scikit-learn', 'networkx', 'mlxtend']],
+          return_exceptions=True
+      )
+      for pkg, r in zip(['scikit-learn', 'networkx', 'mlxtend'], results):
+          if isinstance(r, Exception):
+              print(f'Package installation warning ({pkg}): {r}')
               ok = False
+          else:
+              print(f'Successfully installed {pkg}')
       return ok
   result = await install_packages()
   print(f'Installation result: {result}')
