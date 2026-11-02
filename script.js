@@ -13,11 +13,14 @@ const appState = {
   
   // Pyodide
   let pyodide;
+  let pyodideInitPromise = null;
   async function ensurePyodide(){
     if(pyodide && appState.pyodideReady) return pyodide;
+    if(pyodideInitPromise) return pyodideInitPromise;
     if(typeof loadPyodide !== 'function'){
       throw new Error('Pyodide not loaded. Please refresh the page and try again.');
     }
+    pyodideInitPromise = (async () => {
     try {
       console.log('Loading Pyodide...');
       pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
@@ -31,13 +34,15 @@ const appState = {
         await pyodide.runPythonAsync(`
   import micropip, asyncio
   async def install_packages():
-      try:
-          await micropip.install(['scikit-learn', 'networkx', 'mlxtend'])
-          print('Successfully installed sklearn, networkx, mlxtend')
-          return True
-      except Exception as e:
-          print(f'Package installation warning: {e}')
-          return False
+      ok = True
+      for pkg in ['scikit-learn', 'networkx', 'mlxtend']:
+          try:
+              await micropip.install(pkg, deps=False)
+              print(f'Successfully installed {pkg}')
+          except Exception as e:
+              print(f'Package installation warning ({pkg}): {e}')
+              ok = False
+      return ok
   result = await install_packages()
   print(f'Installation result: {result}')
   `);
@@ -206,6 +211,33 @@ def run_linear_regression(X, y):
         img = fig_to_base64(); return {'img': img, 'coef': coef, 'intercept': intercept, 'r2': float(r2)}
     except Exception as e:
         return {'error': f'Linear regression failed: {str(e)}'}
+
+def run_apriori(transactions, min_support=0.2):
+    try:
+        if not MLXTEND_AVAILABLE:
+            return {'error': 'mlxtend not available for Apriori'}
+        if len(transactions) < 2:
+            return {'error': 'Need at least 2 transactions for Apriori'}
+        te = TransactionEncoder()
+        te_ary = te.fit(transactions).transform(transactions)
+        df = pd.DataFrame(te_ary, columns=te.columns_)
+        frequent = apriori(df, min_support=min_support, use_colnames=True)
+        if frequent.empty:
+            return {'rules': []}
+        rules = association_rules(frequent, metric='confidence', min_threshold=0.0)
+        out = []
+        for _, r in rules.iterrows():
+            out.append({
+                'from': ', '.join(sorted(r['antecedents'])),
+                'to': ', '.join(sorted(r['consequents'])),
+                'support': float(r['support']),
+                'confidence': float(r['confidence']),
+                'lift': float(r['lift']),
+            })
+        out.sort(key=lambda x: x['lift'], reverse=True)
+        return {'rules': out}
+    except Exception as e:
+        return {'error': f'Apriori failed: {str(e)}'}
   `;
   
       await pyodide.runPythonAsync(pyCode);
@@ -217,6 +249,12 @@ def run_linear_regression(X, y):
       console.error('Pyodide initialization failed:', error);
       updatePyodideStatus(false);
       throw new Error('Failed to initialize Python environment. Please check your internet connection and try again.');
+    }
+    })();
+    try {
+      return await pyodideInitPromise;
+    } finally {
+      pyodideInitPromise = null;
     }
   }
   
@@ -284,6 +322,7 @@ def run_linear_regression(X, y):
   async function runPyClassification(rows, pyFuncName){ const numericCols = getNumericColumns(rows, appState.columns); if (numericCols.length < 1) throw new Error('Classification requires at least 1 numeric feature column.'); const featureCols = numericCols.slice(0, Math.min(4, numericCols.length)); const validRows = rows.filter(r => featureCols.every(c => Number.isFinite(Number(r[c])))); if (validRows.length < 2) throw new Error('Need at least 2 valid rows with numeric features.'); const X = validRows.map(r => featureCols.map(c => Number(r[c]))); const lastCol = appState.columns[appState.columns.length - 1]; let y = validRows.map(r => String(r[lastCol] || '').trim()).filter(Boolean); if (y.length !== validRows.length || new Set(y).size < 2) { log('Target column is unsuitable or has only one class. Generating synthetic target.'); const featureToSplit = featureCols[0]; const values = validRows.map(r => Number(r[featureToSplit])); const median = [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]; y = values.map(v => v > median ? 'Class B' : 'Class A'); }
     const py = await ensurePyodide(); py.globals.set('X', X); py.globals.set('y', y); const res = await py.runPythonAsync(`${pyFuncName}(X, y)`); return res.toJs({ create_proxies:false, dict_converter: Object.fromEntries }); }
   async function runPyLinearRegression(rows){ const numericCols = getNumericColumns(rows, appState.columns); const xcol = appState.selectedColumns.x || numericCols[0]; const ycol = appState.selectedColumns.y || numericCols[1]; if (!xcol || !ycol) throw new Error('Linear Regression requires at least 2 numeric columns.'); const validPoints = rows.map(r => ({x: Number(r[xcol]), y: Number(r[ycol])})).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)); if (validPoints.length < 2) throw new Error('Need at least 2 valid numeric data points for regression.'); const X = validPoints.map(p => p.x); const y = validPoints.map(p => p.y); const py = await ensurePyodide(); py.globals.set('X', X); py.globals.set('y', y); py.globals.set('x_label', xcol); py.globals.set('y_label', ycol); const res = await py.runPythonAsync(`run_linear_regression(X, y)`); return res.toJs({ create_proxies:false, dict_converter: Object.fromEntries }); }
+  async function runPyApriori(rows, minSupport){ const itemsCol = appState.columns[0]; const transactions = rows.map(r => String(r[itemsCol] || '').split(';').map(s => s.trim()).filter(Boolean)).filter(t => t.length > 0); if (transactions.length < 2) throw new Error('Apriori requires at least 2 transactions.'); const py = await ensurePyodide(); py.globals.set('transactions', transactions); py.globals.set('min_support', minSupport); const res = await py.runPythonAsync(`run_apriori(transactions, min_support=min_support)`); return res.toJs({ create_proxies:false, dict_converter: Object.fromEntries }); }
   
   // Charts and UI
   let scoreChart, runtimeChart;
@@ -295,7 +334,7 @@ def run_linear_regression(X, y):
   function toCSV(columns, data){ const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`; const header = columns.join(','); const rows = data.map(r => columns.map(c => esc(r[c])).join(',')); return [header, ...rows].join('\n'); }
   
   const Samples = { iris: `sepal_length,sepal_width,petal_length,petal_width,species\n5.1,3.5,1.4,0.2,setosa\n4.9,3.0,1.4,0.2,setosa\n4.7,3.2,1.3,0.2,setosa\n6.2,3.4,5.4,2.3,virginica\n5.9,3.0,5.1,1.8,virginica\n6.4,3.2,4.5,1.5,versicolor\n5.5,2.3,4.0,1.3,versicolor`, sales: `spend_tv,spend_radio,spend_social,revenue\n10,8,4,25\n12,7,5,28\n15,10,6,34\n18,12,8,40\n20,15,10,47`, basket: `items\nMilk;Bread;Butter\nBread;Butter\nMilk;Eggs\nBread;Eggs;Butter\nMilk;Bread\nEggs;Cheese\nBread;Cheese;Butter` };
-  function loadSample(name){ const text = Samples[name]; if(!text) return; const rows = csvToArray(text, name === 'basket' ? ';' : ','); const header = rows[0]; const data = rows.slice(1).map(r => Object.fromEntries(header.map((h,i)=>[h, r[i]]))); handleDataLoad(header, data, `sample: ${name}`); }
+  function loadSample(name){ const text = Samples[name]; if(!text) return; const rows = csvToArray(text, ','); const header = rows[0]; const data = rows.slice(1).map(r => Object.fromEntries(header.map((h,i)=>[h, r[i]]))); handleDataLoad(header, data, `sample: ${name}`); }
   
   function generateInsights(){ const insights = []; const results = appState.algoResults; const byName = Object.fromEntries(results.map(r=>[r.name, r])); const xCol = appState.selectedColumns.x || 'X'; const yCol = appState.selectedColumns.y || 'Y'; if(byName['K-Means']) insights.push(`🔍 The scatter plot shows how ${xCol} relates to ${yCol}, with clusters colored distinctly. Inertia ${byName['K-Means'].inertia?.toFixed(2) || 'N/A'} indicates within-cluster compactness.`); if(byName['Agglomerative (Single)']) insights.push(`🔗 The dendrogram (Single Linkage) illustrates hierarchical merges based on ${xCol} and ${yCol}, helping identify cluster thresholds.`); if(byName['Agglomerative (Average)']) insights.push(`🔗 The dendrogram (Average Linkage) summarizes group-wise distances for ${xCol} vs ${yCol}.`); if(byName['Agglomerative (Complete)']) insights.push(`🔗 The dendrogram (Complete Linkage) emphasizes farthest-point distances along ${xCol} and ${yCol}.`); if(byName['Divisive']) insights.push(`🌐 The MST overlays edges between points in the ${xCol}-${yCol} plane, revealing natural separations.`); if(byName['Linear Regression']){ const r2 = byName['Linear Regression'].r2||byName['Linear Regression'].score||0; insights.push(`📈 Regression line models ${yCol} as a function of ${xCol}. R² ${(r2*100).toFixed(1)}% quantifies explained variance; higher suggests stronger linear relation.`); } if(byName['Decision Tree']) insights.push(`🌳 The tree splits numeric features to classify outcomes; use nodes to understand decision rules and feature thresholds.`); if(byName['Random Forest']) insights.push(`🌲 Ensemble of trees improves robustness; compare accuracy and variance across runs for stability.`); if(byName['Apriori']){ const rules = byName['Apriori'].rules; insights.push(rules?.length > 0 ? `🛒 Top rule "${rules[0].from} → ${rules[0].to}" suggests co-occurrence patterns useful for recommendations.` : `🛒 No strong association rules found; try lowering minimum support.`); } if(appState.data.length > 0) insights.push(`📊 Dataset: ${appState.data.length} rows, ${appState.columns.length} columns; numeric columns: ${getNumericColumns(appState.data, appState.columns).length}.`); if(results.length > 1){ const best = results.reduce((b, r) => (r.score || 0) > (b.score || 0) ? r : b); insights.push(`⚡ Best so far: ${best.name} with score ${(best.score*100).toFixed(1)}%.`); } const el = document.getElementById('insights-content'); el.innerHTML = insights.length > 0 ? `<div class="insights-list">${insights.map(i=>`<div class="insight-item">${i}</div>`).join('')}</div>` : '<p>Run algorithms to generate insights.</p>'; }
   
