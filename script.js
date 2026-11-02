@@ -33,11 +33,18 @@ const appState = {
   async def install_packages():
       ok = True
       for pkg in ['scikit-learn', 'networkx', 'mlxtend']:
-          try:
-              await micropip.install(pkg, deps=False)
-              print(f'Successfully installed {pkg}')
-          except Exception as e:
-              print(f'Package installation warning ({pkg}): {e}')
+          last_err = None
+          for attempt in range(3):
+              try:
+                  await micropip.install(pkg, deps=False)
+                  print(f'Successfully installed {pkg}')
+                  last_err = None
+                  break
+              except Exception as e:
+                  last_err = e
+                  await asyncio.sleep(0.5 * (attempt + 1))
+          if last_err is not None:
+              print(f'Package installation warning ({pkg}): {last_err}')
               ok = False
       return ok
   result = await install_packages()
